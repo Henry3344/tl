@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>午夜档案 · 选择剧本</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="select-wrap">
+      <div class="select-sticky">
+        <div class="select-header">
+          <div class="select-title">选择要加入的剧本</div>
+          <div class="select-sub" id="select-sub">——</div>
+        </div>
+
+        <div class="filter-bar panel">
+          <div class="panel-title">类型筛选</div>
+          <div class="filter-row" id="genre-filter-row"></div>
+          <div class="filter-row" style="margin-top:10px;">
+            <input class="filter-search" id="filter-search" placeholder="搜索剧本名/一句话（例如：门锁 / 剑冢 / 电梯井）" />
+          </div>
+        </div>
+      </div>
+
+      <div class="select-grid">
+        <div class="select-panel panel select-panel--list">
+          <div class="panel-title">剧本列表</div>
+          <div class="script-list" id="script-list"></div>
+        </div>
+
+        <div class="select-panel panel select-panel--preview">
+          <div class="panel-title">剧本预览</div>
+          <div class="script-preview">
+            <div class="script-preview-title" id="pv-title">——</div>
+            <div class="script-preview-meta" id="pv-meta">——</div>
+            <div class="script-preview-desc" id="pv-desc">请选择左侧剧本</div>
+          </div>
+          <div class="select-actions">
+            <button class="btn-secondary" id="btn-back">返回</button>
+            <button class="btn-primary" id="btn-play" disabled>加入剧本并开始</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { DIFF_SETTINGS } from './assets/app.js';
+    import { SCRIPT_CATALOG, orderedCatalogGenres } from './assets/cases.js';
+
+    const url = new URL(window.location.href);
+    const diff = url.searchParams.get('diff') || localStorage.getItem('midnight_diff') || 'normal';
+    const diffHint = DIFF_SETTINGS[diff]?.hint || DIFF_SETTINGS.normal.hint;
+    const diffLabel = DIFF_SETTINGS[diff]?.label || diff;
+    const turns = DIFF_SETTINGS[diff]?.turns || DIFF_SETTINGS.normal.turns;
+    document.getElementById('select-sub').textContent = `难度：${diffLabel}（${diffHint}） · 调查回合：${turns}`;
+
+    let selectedId = null;
+    let activeGenre = '__all';
+    let searchText = '';
+
+    function renderList() {
+      const list = document.getElementById('script-list');
+      list.innerHTML = '';
+
+      const filtered = SCRIPT_CATALOG.filter(s => {
+        const genreOk = activeGenre === '__all' ? true : (s.genre === activeGenre);
+        if (!genreOk) return false;
+        if (!searchText) return true;
+        const t = (s.title + ' ' + s.tagline + ' ' + s.description).toLowerCase();
+        return t.includes(searchText.toLowerCase());
+      });
+
+      const groups = new Map();
+      filtered.forEach(s => {
+        const key = s.genre || '其它';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(s);
+      });
+
+      [...groups.entries()].forEach(([genre, scripts]) => {
+        const g = document.createElement('div');
+        g.className = 'script-group';
+        g.innerHTML = `<div class="script-group-title">${genre}</div>`;
+
+        scripts.forEach(s => {
+          const row = document.createElement('button');
+          row.className = 'script-row' + (s.id === selectedId ? ' selected' : '');
+          row.type = 'button';
+          row.innerHTML = `
+            <div class="script-row-title">${s.title}</div>
+            <div class="script-row-sub">${s.tagline}</div>
+          `;
+          row.addEventListener('click', () => {
+            selectedId = s.id;
+            renderList();
+            renderPreview();
+            document.getElementById('btn-play').disabled = false;
+          });
+          g.appendChild(row);
+        });
+
+        list.appendChild(g);
+      });
+    }
+
+    function renderPreview() {
+      const s = SCRIPT_CATALOG.find(x => x.id === selectedId);
+      if (!s) return;
+      document.getElementById('pv-title').textContent = s.title;
+      document.getElementById('pv-meta').textContent = `${s.genre} · ${s.era} · 嫌疑人数：${s.suspectCount}`;
+      document.getElementById('pv-desc').textContent = s.description;
+    }
+
+    document.getElementById('btn-back').addEventListener('click', () => {
+      window.location.href = new URL('./index.html', window.location.href).toString();
+    });
+
+    document.getElementById('btn-play').addEventListener('click', () => {
+      if (!selectedId) return;
+      const seed = Math.floor(Math.random() * 1e9);
+      const to = new URL('./game.html', window.location.href);
+      to.searchParams.set('script', selectedId);
+      to.searchParams.set('diff', diff);
+      to.searchParams.set('seed', String(seed));
+      window.location.href = to.toString();
+    });
+
+    const genreRow = document.getElementById('genre-filter-row');
+    function wireGenreFilters() {
+      genreRow.innerHTML = '';
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      allBtn.className = 'filter-btn active';
+      allBtn.dataset.genre = '__all';
+      allBtn.textContent = '全部';
+      genreRow.appendChild(allBtn);
+      orderedCatalogGenres().forEach(g => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'filter-btn';
+        b.dataset.genre = g;
+        b.textContent = g;
+        genreRow.appendChild(b);
+      });
+      genreRow.querySelectorAll('.filter-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          genreRow.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active'));
+          b.classList.add('active');
+          activeGenre = b.dataset.genre;
+          renderList();
+        });
+      });
+    }
+    wireGenreFilters();
+
+    const searchEl = document.getElementById('filter-search');
+    searchEl.addEventListener('input', () => {
+      searchText = searchEl.value.trim();
+      renderList();
+    });
+
+    renderList();
+  </script>
+</body>
+</html>

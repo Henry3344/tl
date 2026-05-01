@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>午夜档案 · 剧本杀</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="screen-title">
+      <span class="title-emblem">🕯️</span>
+      <div class="title-main">午夜档案</div>
+      <div class="title-sub">推理 · 午夜入室（内置剧本）</div>
+      <div class="difficulty-row">
+        <button class="diff-btn" type="button" data-diff="easy">
+          <span class="diff-btn-main">推理新手</span>
+          <span class="diff-btn-sub">宽裕 · 回合多 · 容错高</span>
+        </button>
+        <button class="diff-btn active" type="button" data-diff="normal">
+          <span class="diff-btn-main">进阶推理</span>
+          <span class="diff-btn-sub">标准节奏 · 拆谎靠细节</span>
+        </button>
+        <button class="diff-btn" type="button" data-diff="hard">
+          <span class="diff-btn-main">硬核老手</span>
+          <span class="diff-btn-sub">回合紧 · 容错低 · 直指要害</span>
+        </button>
+      </div>
+      <p class="diff-blurb" id="diff-blurb"></p>
+      <button class="btn-start" id="btn-start">📁 开启新案件</button>
+      <div class="title-disclaimer">
+        <p>本网页所载剧本均为虚构创作；如有雷同，纯属巧合。</p>
+        <p class="title-disclaimer-age">未满18岁请自觉离开本网站。</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { DIFF_SETTINGS } from './assets/app.js';
+
+    const state = {
+      difficulty: 'normal',
+      maxTurns: DIFF_SETTINGS.normal.turns
+    };
+
+    function setDiff(el, diff) {
+      document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      state.difficulty = diff;
+      state.maxTurns = DIFF_SETTINGS[diff].turns;
+      localStorage.setItem('midnight_diff', diff);
+      const blurb = document.getElementById('diff-blurb');
+      if (blurb) blurb.textContent = DIFF_SETTINGS[diff]?.shortHint || '';
+    }
+
+    const saved = localStorage.getItem('midnight_diff');
+    const diffKey = saved && DIFF_SETTINGS[saved] ? saved : 'normal';
+    localStorage.setItem('midnight_diff', diffKey);
+    const initBtn = document.querySelector(`.diff-btn[data-diff="${diffKey}"]`);
+    if (initBtn) setDiff(initBtn, diffKey);
+
+    document.querySelectorAll('.diff-btn').forEach(b => {
+      b.addEventListener('click', () => setDiff(b, b.dataset.diff));
+    });
+
+    document.getElementById('btn-start').addEventListener('click', () => {
+      const diff = localStorage.getItem('midnight_diff') || state.difficulty;
+      const url = new URL('./select.html', window.location.href);
+      url.searchParams.set('diff', diff);
+      window.location.href = url.toString();
+    });
+  </script>
+</body>
+</html>

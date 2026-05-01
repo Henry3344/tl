@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>午夜档案 · 游戏</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/app.css" />
+  <style>
+    /* Game screen styles (kept local to reduce shared CSS size) */
+    #screen-loading {
+      text-align: center;
+      padding: 88px 24px;
+      display: none;
+      border: 1px solid rgba(74, 60, 42, 0.35);
+      background: linear-gradient(180deg, rgba(30, 24, 16, 0.65) 0%, rgba(14, 11, 8, 0.9) 100%);
+      box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(240, 220, 180, 0.05);
+      border-radius: 3px;
+    }
+    .loading-spinner { width: 48px; height: 48px; border: 2px solid #4a3828; border-top-color: #c8972a; border-radius: 50%; margin: 0 auto 24px; animation: spin 1s linear infinite; box-shadow: 0 0 20px rgba(200, 151, 42, 0.15); }
+    .loading-text { color: #c4a878; font-size: 13px; letter-spacing: 0.28em; font-family: 'Noto Serif SC', serif; }
+    .loading-flavor { color: #8a7658; font-size: 12px; margin-top: 14px; font-style: italic; letter-spacing: 0.12em; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #screen-game {
+      display: none;
+      animation: fadeIn 0.8s ease;
+      flex-direction: column;
+      max-height: calc(100vh - 40px);
+      min-height: 0;
+      overflow: hidden;
+    }
+    .case-header {
+      background: linear-gradient(182deg, #fcfaf4 0%, #ebe4d4 42%, #dfd6c6 100%);
+      border: 1px solid rgba(52, 42, 30, 0.55);
+      border-radius: 3px;
+      padding: 22px 26px 18px;
+      margin-bottom: 4px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      flex-shrink: 0;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 252, 245, 0.75),
+        inset 0 -20px 50px rgba(40, 32, 22, 0.06),
+        0 10px 32px rgba(0, 0, 0, 0.42),
+        0 0 0 1px rgba(90, 26, 26, 0.12);
+    }
+    .case-header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #5c1414, #8b1a1a, #c04040, #8b1a1a, #5c1414);
+      box-shadow: 0 2px 10px rgba(139, 26, 26, 0.35);
+    }
+    .case-meta { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+    .case-number { font-size: 10px; letter-spacing: 0.38em; color: #5c5044; font-family: ui-monospace, monospace; opacity: 0.92; }
+    .case-status { font-size: 10px; letter-spacing: 0.22em; padding: 4px 12px; border: 1px solid; border-radius: 2px; font-family: 'Noto Serif SC', serif; }
+    .status-open { border-color: #8b1a1a; color: #8b1a1a; }
+    .status-solved { border-color: #1a5c1a; color: #1a5c1a; }
+    .case-title { font-family: 'Noto Serif SC', serif; font-size: 24px; color: var(--ink); font-weight: 700; margin-bottom: 6px; letter-spacing: 0.06em; text-shadow: 0 1px 0 rgba(255, 252, 245, 0.8); }
+    .case-location { font-size: 12px; color: #5c5048; letter-spacing: 0.14em; border-top: 1px dashed rgba(90, 78, 62, 0.35); padding-top: 10px; margin-top: 4px; }
+
+    .game-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 6px;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding-top: 2px;
+    }
+
+    .sidebar .panel {
+      background: linear-gradient(178deg, #faf7ee 0%, #eae3d4 55%, #dfd6c6 100%);
+      border: 1px solid rgba(46, 38, 28, 0.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 252, 244, 0.65),
+        inset 0 -16px 36px rgba(50, 40, 28, 0.05),
+        0 8px 24px rgba(0, 0, 0, 0.34);
+      border-radius: 3px;
+    }
+    .sidebar .panel-title {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 10px;
+      letter-spacing: 0.38em;
+      color: #3d3428;
+      border-bottom-color: rgba(72, 60, 46, 0.38);
+      padding-bottom: 10px;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      align-self: stretch;
+      padding-right: 4px;
+    }
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-track { background: var(--aged); }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--fold); }
+    .suspect-list { display: flex; flex-direction: column; gap: 8px; }
+    .suspect-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 11px 13px;
+      background: rgba(248, 242, 228, 0.85);
+      border: 1px solid rgba(72, 62, 48, 0.42);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      box-shadow: inset 0 1px 0 rgba(255, 252, 245, 0.5);
+    }
+    .suspect-avatar {
+      flex: 0 0 auto;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(74, 56, 38, 0.35);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      background: var(--aged);
+    }
+    .suspect-card-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .suspect-avatar--placeholder {
+      background: linear-gradient(135deg, var(--fold), var(--aged));
+    }
+    .suspect-card:hover { border-color: var(--gold); background: #ece4cc; }
+    .suspect-name { font-size: 13px; font-weight: 500; color: var(--ink); margin-bottom: 2px; }
+    .suspect-role { font-size: 11px; color: var(--muted); }
+    .suspect-badge { position: absolute; top: 10px; right: 10px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+
+    .clue-legend { display: flex; gap: 12px; margin: -6px 0 10px; font-size: 10px; letter-spacing: 0.12em; color: var(--muted); }
+    .leg { display: inline-flex; align-items: center; gap: 6px; }
+    .leg::before { content: ''; width: 10px; height: 10px; border-radius: 2px; }
+    .leg-arch::before { background: linear-gradient(135deg, #c9a227, #8b6914); opacity: 0.85; }
+    .leg-deep::before { background: linear-gradient(135deg, #c04040, #5c1a1a); opacity: 0.85; }
+
+    .clue-list { display: flex; flex-direction: column; gap: 6px; }
+    .clue-item { font-size: 12px; color: var(--text); padding: 8px 10px 8px 10px; background: var(--aged); border-left: 3px solid var(--gold); line-height: 1.55; border-radius: 0 2px 2px 0; display: flex; gap: 8px; align-items: flex-start; }
+    .clue-item.clue-empty { border-left-color: var(--fold); color: var(--muted); font-style: italic; display: block; }
+    .clue-item.clue-baseline { border-left-color: #a67c00; background: linear-gradient(90deg, rgba(198,162,58,0.12), var(--aged)); }
+    .clue-item.clue-breakthrough { border-left-color: var(--blood); background: linear-gradient(90deg, rgba(139,26,26,0.10), #f5ebe4); box-shadow: inset 0 0 0 1px rgba(139,26,26,0.12); }
+    .clue-item.new { animation: slideIn 0.45s ease; }
+    .clue-item.new.clue-breakthrough { animation: cluePulse 0.65s ease, slideIn 0.45s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes cluePulse { from { box-shadow: 0 0 0 0 rgba(139,26,26,0.35); } to { box-shadow: 0 0 0 6px rgba(139,26,26,0); } }
+    .clue-tag { flex: 0 0 auto; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; margin-top: 2px; white-space: nowrap; }
+    .clue-baseline .clue-tag { background: rgba(166,124,0,0.18); color: #6b5320; border: 1px solid rgba(166,124,0,0.35); }
+    .clue-breakthrough .clue-tag { background: rgba(139,26,26,0.14); color: var(--blood); border: 1px solid rgba(139,26,26,0.28); font-weight: 600; }
+    .clue-text { flex: 1; min-width: 0; }
+
+    .action-list { display: flex; flex-direction: column; gap: 6px; }
+    .action-btn { padding: 9px 12px; background: var(--aged); border: 1px solid var(--fold); color: var(--ink); font-size: 12px; text-align: left; cursor: pointer; border-radius: 2px; transition: all 0.2s; font-family: 'Noto Sans SC', sans-serif; display: flex; align-items: center; gap: 8px; }
+    .action-btn:hover { border-color: var(--gold); background: #ece4cc; }
+    .action-btn.danger:hover { border-color: var(--blood); background: #f0e0dc; color: var(--blood); }
+    .action-btn .icon { font-size: 14px; opacity: 0.7; }
+
+    .chat-panel {
+      background:
+        radial-gradient(130% 85% at 50% -10%, rgba(200, 151, 42, 0.09), transparent 52%),
+        linear-gradient(178deg, #fcfbf7 0%, #ebe4d6 45%, #e2d9c8 100%);
+      border: 1px solid rgba(46, 38, 28, 0.52);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 252, 245, 0.75),
+        inset 0 0 60px rgba(40, 32, 22, 0.04),
+        0 12px 36px rgba(0, 0, 0, 0.38);
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .chat-messages {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 18px 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(255, 252, 246, 0.35) 0%, transparent 120px);
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-track { background: var(--aged); }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--fold); }
+    .msg { animation: slideIn 0.3s ease; }
+    .msg-gm { background: var(--aged); border: 1px solid var(--fold); border-radius: 2px; padding: 12px 14px; font-size: 13px; line-height: 1.75; color: var(--text); position: relative; }
+    .msg-gm::before { content: '◆ 叙事者'; display: block; font-size: 9px; letter-spacing: 0.25em; color: var(--muted); margin-bottom: 8px; }
+    .msg-gm--opening::before { content: '◆ 卷宗开启'; color: #8b6914; }
+
+    .gm-rich { display: flex; flex-direction: column; gap: 12px; }
+    .gm-block { border-radius: 2px; padding: 10px 12px; border: 1px solid rgba(212,201,176,0.55); background: rgba(245,239,224,0.35); }
+    .gm-block-inner { font-size: 13px; color: var(--text); }
+    .gm-bookquote { color: #5c3d12; font-family: 'Noto Serif SC', serif; font-weight: 600; }
+
+    .gm-block--scene { border-left: 3px solid #7a6040; background: linear-gradient(90deg, rgba(122,96,64,0.10), rgba(245,239,224,0.25)); font-style: italic; color: #4a3828; }
+    .gm-block--interrogate { border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(198,162,58,0.12), rgba(245,239,224,0.35)); }
+    .gm-block--dialogue { border-left: 3px solid #9a7b2e; box-shadow: inset 4px 0 0 rgba(184,134,11,0.35); background: rgba(232,223,200,0.55); }
+    .gm-block--key {
+      border-left: 3px solid var(--blood);
+      background: linear-gradient(90deg, rgba(139,26,26,0.08), rgba(245,239,224,0.45));
+      box-shadow: inset 0 0 0 1px rgba(139,26,26,0.10);
+    }
+    .gm-block--key .gm-block-inner { font-weight: 600; color: #3a1810; }
+
+    .gm-block--urgent {
+      border: 1px solid rgba(139,26,26,0.45);
+      background: radial-gradient(ellipse 120% 90% at 50% 0%, rgba(139,26,26,0.18), #1f1008);
+      color: #e8dcc8;
+      padding: 10px 12px;
+    }
+    .gm-urgent-tag { font-size: 9px; letter-spacing: 0.35em; color: #f0c8c0; margin-bottom: 8px; opacity: 0.95; }
+    .gm-urgent-body { font-size: 13px; line-height: 1.85; color: #ebd9c8; }
+    .gm-block--urgent .gm-bookquote { color: #f5d76e; }
+
+    .gm-opening-banner {
+      font-family: 'Noto Serif SC', serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: #7a4a10;
+      letter-spacing: 0.14em;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .gm-opening-setting { margin-top: 6px; font-size: 12px; color: var(--muted); letter-spacing: 0.14em; }
+    .gm-opening-divider { height: 1px; margin: 10px 0; background: linear-gradient(90deg, transparent, var(--fold), transparent); }
+    .gm-opening-label { font-size: 9px; letter-spacing: 0.35em; color: var(--muted); margin: 8px 0 6px; text-transform: uppercase; }
+    .gm-opening-label--clues { color: #8b6914; }
+    .gm-opening-victim { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .gm-opening-discovery { margin-top: 6px; font-size: 13px; color: #4a3520; line-height: 1.85; }
+    .gm-opening-clues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .gm-opening-clues li {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 10px;
+      border-radius: 2px;
+      border: 1px solid rgba(166,124,0,0.35);
+      background: linear-gradient(90deg, rgba(198,162,58,0.10), rgba(245,239,224,0.35));
+    }
+    .gm-clue-num {
+      flex: 0 0 auto;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 11px; font-weight: 800;
+      color: #f5efe0;
+      background: radial-gradient(circle at 30% 25%, #e2bc52, #8b6914);
+      border: 1px solid rgba(90,58,0,0.35);
+      margin-top: 1px;
+    }
+    .gm-opening-footer {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(212,201,176,0.9);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    .gm-opening-label--axes { color: var(--blood); margin-top: 14px; }
+    .gm-opening-axes {
+      list-style: none; margin: 0; padding: 0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .gm-opening-axes li {
+      font-size: 12px; line-height: 1.75; color: #4a3520;
+      padding: 8px 10px;
+      border-left: 3px solid rgba(139,26,26,0.35);
+      background: rgba(139,26,26,0.06);
+      border-radius: 0 2px 2px 0;
+    }
+    .msg-player { align-self: flex-end; background: #1a0d00; border: 1px solid #3a2a10; border-radius: 2px; padding: 10px 14px; font-size: 13px; line-height: 1.7; color: #c8972a; max-width: 80%; white-space: pre-wrap; }
+    .msg-system { text-align: center; font-size: 11px; color: var(--muted); letter-spacing: 0.15em; padding: 4px 0; border-top: 0.5px dashed var(--fold); border-bottom: 0.5px dashed var(--fold); }
+
+    .chat-input-area { border-top: 1px solid var(--fold); padding: 12px; display: flex; gap: 8px; }
+    .chat-input { flex: 1; padding: 10px 12px; background: var(--aged); border: 1px solid var(--fold); border-radius: 2px; color: var(--ink); font-size: 13px; font-family: 'Noto Sans SC', sans-serif; outline: none; transition: border-color 0.2s; }
+    .chat-input:focus { border-color: var(--gold); }
+    .chat-input::placeholder { color: var(--muted); }
+    .chat-send { padding: 10px 16px; background: #1a0800; border: 1px solid #3a2010; color: var(--gold-light); font-size: 12px; cursor: pointer; border-radius: 2px; transition: all 0.2s; letter-spacing: 0.1em; }
+    .chat-send:hover { border-color: var(--gold); background: #2a1400; }
+    .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .turns-bar { display: flex; align-items: center; gap: 4px; padding: 10px 16px; border-top: 1px solid var(--fold); background: var(--aged); }
+    .turn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fold); transition: background 0.3s; }
+    .turn-dot.used { background: var(--gold); }
+    .turns-label { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .turns-warning { color: var(--blood) !important; font-weight: 500; }
+
+    #screen-result {
+      display: none;
+      flex-direction: column;
+      max-height: calc(100vh - 48px);
+      min-height: 0;
+      overflow: hidden;
+      padding: 0;
+      background: linear-gradient(178deg, #faf8f2 0%, #e8e0d0 55%, #ddd4c2 100%);
+      border: 1px solid rgba(52, 42, 30, 0.55);
+      animation: fadeIn 0.8s ease;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 252, 245, 0.85),
+        inset 0 -30px 80px rgba(40, 32, 22, 0.06),
+        0 16px 48px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(90, 26, 26, 0.1);
+      border-radius: 3px;
+      position: relative;
+    }
+    .result-head-sticky {
+      flex-shrink: 0;
+      padding: 28px 36px 20px;
+      background: linear-gradient(180deg, rgba(252, 249, 242, 0.97) 0%, rgba(236, 228, 212, 0.98) 100%);
+      border-bottom: 1px solid rgba(72, 58, 42, 0.35);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+      z-index: 2;
+    }
+    .result-body-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 20px 36px 36px;
+    }
+    #screen-result::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 12%;
+      right: 12%;
+      height: 5px;
+      background: linear-gradient(90deg, transparent, rgba(139, 26, 26, 0.55), transparent);
+      opacity: 0.85;
+      border-radius: 0 0 2px 2px;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .result-verdict {
+      font-family: 'ZCOOL XiaoWei', serif;
+      font-size: clamp(28px, 5vw, 38px);
+      margin-bottom: 6px;
+      letter-spacing: 0.12em;
+      text-shadow: 0 2px 18px rgba(0, 0, 0, 0.12);
+    }
+    .result-correct { color: #145018; text-shadow: 0 0 28px rgba(26, 92, 26, 0.22); }
+    .result-wrong { color: var(--blood); text-shadow: 0 0 26px rgba(139, 26, 26, 0.25); }
+    #result-accuracy p {
+      font-family: 'Noto Serif SC', serif;
+      letter-spacing: 0.06em;
+    }
+    .result-story {
+      font-size: 14px;
+      line-height: 2.05;
+      color: #2c2018;
+      margin: 0 0 20px;
+      padding: 22px 24px;
+      white-space: pre-wrap;
+      background: linear-gradient(165deg, rgba(248, 242, 232, 0.95) 0%, rgba(232, 224, 208, 0.98) 100%);
+      border: 1px solid rgba(74, 62, 48, 0.38);
+      border-left: 4px solid var(--gold);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 252, 245, 0.75),
+        0 8px 26px rgba(0, 0, 0, 0.18);
+      border-radius: 2px;
+    }
+    .result-stats { display: flex; gap: 24px; margin: 18px 0 0; flex-wrap: wrap; }
+    .stat-item { text-align: center; min-width: 110px; padding: 10px 12px; background: rgba(255, 252, 245, 0.45); border: 1px solid rgba(74, 62, 48, 0.22); border-radius: 2px; }
+    .stat-num { font-size: 28px; font-weight: 700; color: var(--ink); font-family: 'Noto Serif SC', serif; }
+    .stat-label { font-size: 11px; color: var(--muted); letter-spacing: 0.18em; margin-top: 4px; }
+    .btn-new-case {
+      display: inline-block;
+      margin-top: 28px;
+      padding: 15px 44px;
+      background: linear-gradient(180deg, #241810 0%, #140c08 100%);
+      border: 1px solid #5a3a18;
+      color: var(--gold-light);
+      font-family: 'Noto Serif SC', serif;
+      font-size: 15px;
+      letter-spacing: 0.22em;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.2s;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 220, 160, 0.08);
+    }
+    .btn-new-case:hover { border-color: var(--gold); }
+
+    #accusation-overlay { display: none; position: fixed; inset: 0; background: rgba(5, 2, 0, 0.85); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+    #accusation-overlay.show { display: flex; }
+    .accusation-modal { background: var(--paper); border: 1px solid var(--blood); border-top: 3px solid var(--blood); max-width: 460px; width: 100%; padding: 28px; animation: fadeIn 0.3s ease; }
+    .accusation-title { font-family: 'Noto Serif SC', serif; font-size: 20px; color: var(--ink); margin-bottom: 6px; }
+    .accusation-sub { font-size: 12px; color: var(--muted); margin-bottom: 20px; line-height: 1.6; }
+    .form-label { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 8px; display: block; }
+    .suspect-radio-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .suspect-radio {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--fold);
+      background: var(--aged);
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.2s;
+    }
+    .modal-suspect-avatar {
+      flex: 0 0 auto;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(74, 56, 38, 0.3);
+    }
+    .suspect-radio:hover, .suspect-radio.checked { border-color: var(--blood); background: #f0e4e4; }
+    .suspect-radio input { accent-color: var(--blood); }
+    .reason-input { width: 100%; padding: 10px 12px; background: var(--aged); border: 1px solid var(--fold); border-radius: 2px; font-family: 'Noto Sans SC', sans-serif; font-size: 13px; color: var(--ink); resize: vertical; min-height: 80px; outline: none; margin-bottom: 20px; }
+    .reason-input:focus { border-color: var(--gold); }
+    .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-cancel { padding: 10px 20px; background: transparent; border: 1px solid var(--fold); color: var(--muted); font-size: 13px; cursor: pointer; border-radius: 2px; }
+    .btn-accuse { padding: 10px 24px; background: var(--blood); border: 1px solid #c04040; color: #f5efe0; font-size: 13px; cursor: pointer; border-radius: 2px; font-family: 'Noto Serif SC', serif; letter-spacing: 0.1em; }
+    .btn-accuse:hover { background: #a02020; }
+
+    @media (max-width: 600px) {
+      .game-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(260px, 48vh) minmax(200px, 1fr);
+      }
+      .chat-panel { order: 1; min-height: 0; }
+      .sidebar { order: 2; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="screen-loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">墨色渗入卷宗...</div>
+    <div class="loading-flavor" id="loading-flavor">翻阅陈年卷宗</div>
+  </div>
+
+  <div id="screen-game">
+    <div class="case-header">
+      <div class="case-meta">
+        <span class="case-number" id="case-number">CASE #----</span>
+        <span class="case-status status-open" id="case-status">调查进行中</span>
+      </div>
+      <div class="case-title" id="case-title">──</div>
+      <div class="case-location" id="case-location">──</div>
+    </div>
+
+    <div class="game-layout">
+      <div class="sidebar">
+        <div class="panel">
+          <div class="panel-title">嫌疑人</div>
+          <div class="suspect-list" id="suspect-list"></div>
+        </div>
+        <div class="panel clue-panel">
+          <div class="panel-title">已发现线索</div>
+          <div class="clue-legend" aria-hidden="true"><span class="leg leg-arch">入库</span><span class="leg leg-deep">刺穿</span></div>
+          <div class="clue-list" id="clue-list"><div class="clue-item clue-empty">尚未收集到线索</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">侦探行动</div>
+          <div class="action-list">
+            <button class="action-btn" id="act-alibi"><span class="icon">🔎</span>查询不在场证明</button>
+            <button class="action-btn" id="act-scene"><span class="icon">🏚️</span>勘察现场</button>
+            <button class="action-btn" id="act-analysis"><span class="icon">📋</span>线索分析</button>
+            <button class="action-btn danger" id="act-accuse"><span class="icon">⚖️</span>宣布逮捕！</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-panel">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="turns-bar">
+          <div id="turn-dots"></div>
+          <span class="turns-label" id="turns-label"></span>
+        </div>
+        <div class="chat-input-area">
+          <input class="chat-input" id="chat-input" placeholder="点名、施压、串联痕迹——叙事者不替你动脑。" maxlength="200">
+          <button class="chat-send" id="send-btn">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-result">
+    <div class="result-head-sticky">
+      <div class="result-verdict" id="result-verdict"></div>
+      <div id="result-accuracy"></div>
+      <div class="result-stats">
+        <div class="stat-item">
+          <div class="stat-num" id="stat-turns">0</div>
+          <div class="stat-label">提问次数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num" id="stat-clues">0</div>
+          <div class="stat-label">发现线索</div>
+        </div>
+      </div>
+    </div>
+    <div class="result-body-scroll">
+      <div class="result-story" id="result-story"></div>
+      <button class="btn-new-case" id="btn-new-case">🗂️ 返回剧本选择</button>
+    </div>
+  </div>
+</div>
+
+<div id="accusation-overlay">
+  <div class="accusation-modal">
+    <div class="accusation-title">发出逮捕令</div>
+    <div class="accusation-sub">逮捕令落下就没有橡皮擦。确信你能把自己的推断钉进物证与时间线。</div>
+    <label class="form-label">你认为谁是凶手？</label>
+    <div class="suspect-radio-list" id="modal-suspects"></div>
+    <label class="form-label">你的推理依据</label>
+    <textarea class="reason-input" id="accusation-reason" placeholder="说明动机、机会与证据..."></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="btn-cancel-accuse">再想想</button>
+      <button class="btn-accuse" id="btn-submit-accuse">🔒 宣布逮捕</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { DIFF_SETTINGS, makeRng, pick, shuffleInPlace } from './assets/app.js';
+  import { generateScriptCase, SCRIPT_CATALOG, resolveVerdictEpilogue } from './assets/cases.js';
+
+  const loadingFlavors = [
+    '有人在纸上改过一行供词……',
+    '门锁说谎时，尘土往往是真话。',
+    '墨迹未干的不只是时辰，还有动机。',
+    '暗处的指纹比你更早到场。',
+    '把尖叫翻译成时间线。',
+    '谁在复述别人的惊慌？'
+  ];
+
+  const url = new URL(window.location.href);
+  const scriptId = url.searchParams.get('script') || 'rose_manor';
+  const diff = url.searchParams.get('diff') || localStorage.getItem('midnight_diff') || 'normal';
+  const seed = Number(url.searchParams.get('seed') || String(Math.floor(Math.random() * 1e9)));
+  const rng = makeRng(seed);
+
+  const gameState = {
+    caseData: null,
+    history: [],
+    clues: [],
+    turns: 0,
+    maxTurns: DIFF_SETTINGS[diff]?.turns || DIFF_SETTINGS.normal.turns,
+    difficulty: diff,
+    caseNum: Math.floor(rng() * 9000) + 1000,
+    hiddenRevealCursor: 0
+  };
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function nlToBr(html) {
+    return html.split('\n').join('<br>');
+  }
+
+  /** 对已 escape 的正文再包裹对白引号（中文直角引号优先） */
+  function dialogueHighlightEscaped(escaped) {
+    let out = escaped.replace(/「([^」]*)」/g, '<span class="gm-bookquote">「$1」</span>');
+    out = out.replace(/“([^”]*)”/g, '<span class="gm-bookquote">“$1”</span>');
+    return out;
+  }
+
+  function urgencyLine() {
+    const meta = SCRIPT_CATALOG.find(s => s.id === scriptId);
+    const genre = meta?.genre || '';
+    const tails = [
+      '下一轮讯问要是还飘在表面上，叙事者也只能看着你沉没。',
+      '留白的页边不多——要把力气花在刀刃口供与细节上。',
+      '你再绕着圈子寒暄，真相会选择跟别人走。',
+      '时钟不讲情面：这一刻你要钉死矛盾，而不是讲故事。'
+    ];
+    const tail = tails[Math.floor(rng() * tails.length)];
+    if (scriptId === 'highspeed_train' || genre === '封闭空间') {
+      return `隧道尽头的灯光一晃；有人在看你还剩几步能把连接处对齐。${tail}`;
+    }
+    if (genre === '孤岛风暴') {
+      return `海浪替外墙计数；断电余韵里只剩下谁在说谎值得一撕。${tail}`;
+    }
+    if (genre === '都市推理') {
+      return `霓虹背面有的是冷眼旁观——城里不缺聪明人，缺的是敢于点名的人。${tail}`;
+    }
+    if (genre === '古风疑案') {
+      return `香火不肯往上飘的那一瞬，祠堂里最体面的往往是伪装。${tail}`;
+    }
+    if (genre === '民国悬疑') {
+      return `戏台下的锣鼓停了半拍——谁在台面下面换气，你心里得有名单。${tail}`;
+    }
+    if (genre === '居家伦理') {
+      return `门锁一声半拍玄关的回音——熟人作案最怕你把客气当真。${tail}`;
+    }
+    if (genre === '仙侠诡事') {
+      return `剑气散尽后的寂静比雷声更难说谎——谁在灵气乱流里动了手脚？${tail}`;
+    }
+    if (genre === '校园推理') {
+      return `晚自习的灯光只剩走廊回声——谁在门禁与时间戳之间留了后门？${tail}`;
+    }
+    if (genre === '职场推理') {
+      return `电梯井的风往上灌——谁在打卡记录与权限日志之间替你签了字？${tail}`;
+    }
+    if (genre === '科幻悬疑') {
+      return `休眠舱误差三秒就够改写供述——系统在记账，谁在改写账本？${tail}`;
+    }
+    return `风雨贴着屋檐作响——雷声盖住过什么，你心里得有数。${tail}`;
+  }
+
+  function tenseSuffix(tense) {
+    return tense ? `\n\n【时限逼近】\n${tense}` : '';
+  }
+
+  function classifyGmParagraph(raw) {
+    const p = raw.trim();
+    const escaped = escapeHtml(p);
+    const cls = ['gm-block'];
+
+    if (/你与.+当面对质/.test(p) || /^你与.+（/.test(p)) cls.push('gm-block--interrogate');
+    else if (/「/.test(p) || /“/.test(p)) cls.push('gm-block--dialogue');
+
+    if (
+      /暴风雨|雷雨|海浪|隧道|断电|钟声|雨声|走廊|配电室|车厢|霓虹|香火/.test(p) &&
+      !/^你与/.test(p)
+    ) {
+      cls.push('gm-block--scene');
+    }
+
+    const keyHints =
+      /谁在时间线上说谎|谁在时辰上说谎|谁在说谎|最值得加压|最值得怀疑|谁在时间点上说谎|谁在口径上说谎|谁在撒谎|直指要害|榫卯对齐|刀刃口供|承重疑点|沉没|对齐/;
+    if (keyHints.test(p)) cls.push('gm-block--key');
+
+    return { cls: cls.join(' '), htmlInner: nlToBr(dialogueHighlightEscaped(escaped)) };
+  }
+
+  function renderGmRich(root, text) {
+    root.innerHTML = '';
+    const parts = String(text)
+      .split(/\n\n+/)
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    for (const part of parts) {
+      if (/【时限逼近】/.test(part)) {
+        const inner = part.replace(/^【时限逼近】[\s\n]*/m, '').trim();
+        const div = document.createElement('div');
+        div.className = 'gm-block gm-block--urgent';
+        div.innerHTML =
+          '<div class="gm-urgent-tag">时限逼近</div><div class="gm-urgent-body">' +
+          nlToBr(dialogueHighlightEscaped(escapeHtml(inner))) +
+          '</div>';
+        root.appendChild(div);
+        continue;
+      }
+
+      const info = classifyGmParagraph(part);
+      const div = document.createElement('div');
+      div.className = info.cls;
+      div.innerHTML = '<div class="gm-block-inner">' + info.htmlInner + '</div>';
+      root.appendChild(div);
+    }
+  }
+
+  function addGmOpening(data) {
+    const container = $('chat-messages');
+    const wrap = document.createElement('div');
+    wrap.className = 'msg msg-gm msg-gm--opening';
+
+    const cluesHtml = data.initial_clues
+      .map(
+        (c, i) =>
+          `<li><span class="gm-clue-num">${i + 1}</span><span>${escapeHtml(c)}</span></li>`
+      )
+      .join('');
+
+    const axesHtml =
+      Array.isArray(data.deduction_focus) && data.deduction_focus.length > 0
+        ? `<div class="gm-opening-label gm-opening-label--axes">几处承重疑点（叙事者不替你结案）</div><ul class="gm-opening-axes">${data.deduction_focus.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>`
+        : '';
+
+    wrap.innerHTML =
+      `<div class="gm-rich gm-opening">
+        <div class="gm-opening-banner">${escapeHtml(data.title)}</div>
+        <div class="gm-opening-setting">${escapeHtml(data.setting)}</div>
+        <div class="gm-opening-divider"></div>
+        <div class="gm-opening-label">死因叙事的第一行</div>
+        <div class="gm-opening-victim">${escapeHtml(`${data.victim.name}，${data.victim.age}岁，${data.victim.occupation}`)}</div>
+        <div class="gm-opening-discovery">${escapeHtml(data.victim.discovery)}</div>
+        <div class="gm-opening-label gm-opening-label--clues">先入卷的痕迹（还可推翻）</div>
+        <ul class="gm-opening-clues">${cluesHtml}</ul>
+        ${axesHtml}
+        <div class="gm-opening-footer">${escapeHtml(`在场 ${data.suspects.length} 人各怀心事；卷宗留白 ${gameState.maxTurns} 纸——用尽之前，别把草率当成决断。`)}</div>
+      </div>`;
+
+    container.appendChild(wrap);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function $(id) { return document.getElementById(id); }
+  function show(id) {
+    ['screen-loading','screen-game','screen-result'].forEach(s => {
+      const el = $(s);
+      if (!el) return;
+      if (s === id) {
+        el.style.display = id === 'screen-game' || id === 'screen-result' ? 'flex' : 'block';
+      } else {
+        el.style.display = 'none';
+      }
+    });
+  }
+
+  function addMessage(type, text) {
+    const container = $('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'msg';
+    if (type === 'gm') {
+      div.className += ' msg-gm';
+      const inner = document.createElement('div');
+      inner.className = 'gm-rich';
+      renderGmRich(inner, text);
+      div.appendChild(inner);
+    }
+    if (type === 'player') {
+      div.className += ' msg-player';
+      div.textContent = text;
+    }
+    if (type === 'system') {
+      div.className += ' msg-system';
+      div.textContent = text;
+    }
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function updateClues() {
+    const cl = $('clue-list');
+    cl.innerHTML = '';
+    if (gameState.clues.length === 0) {
+      cl.innerHTML = '<div class="clue-item clue-empty">尚未收集到线索</div>';
+      return;
+    }
+    const initialLen = gameState.caseData?.initial_clues?.length ?? 0;
+    gameState.clues.forEach((c, i) => {
+      const div = document.createElement('div');
+      const isBaseline = i < initialLen;
+      div.className = 'clue-item';
+      if (isBaseline) div.classList.add('clue-baseline');
+      else div.classList.add('clue-breakthrough');
+      if (i >= gameState.clues.length - 1 && gameState.turns > 0) div.classList.add('new');
+
+      const tag = document.createElement('span');
+      tag.className = 'clue-tag';
+      tag.textContent = isBaseline ? '入库' : '刺穿';
+
+      const txt = document.createElement('span');
+      txt.className = 'clue-text';
+      txt.textContent = c;
+
+      div.appendChild(tag);
+      div.appendChild(txt);
+      cl.appendChild(div);
+    });
+  }
+
+  function updateTurnUI() {
+    const max = gameState.maxTurns;
+    const used = gameState.turns;
+    const dots = $('turn-dots');
+    dots.innerHTML = '';
+    dots.style.display = 'flex';
+    dots.style.gap = '4px';
+    for (let i = 0; i < max; i++) {
+      const d = document.createElement('div');
+      d.className = 'turn-dot' + (i < used ? ' used' : '');
+      dots.appendChild(d);
+    }
+    const remaining = max - used;
+    const label = $('turns-label');
+    label.textContent = remaining <= 0 ? '卷宗封口' : `卷宗留白 · ${remaining}`;
+    label.classList.toggle('turns-warning', remaining <= 2);
+  }
+
+  function initGameUI(data) {
+    $('case-number').textContent = `CASE #${gameState.caseNum}`;
+    $('case-title').textContent = data.title;
+    $('case-location').textContent = `📍 ${data.setting}`;
+
+    const sl = $('suspect-list');
+    sl.innerHTML = '';
+    data.suspects.forEach((s) => {
+      const div = document.createElement('div');
+      div.className = 'suspect-card';
+      const pic = s.avatar_url
+        ? `<img class="suspect-avatar" src="${String(s.avatar_url).replace(/"/g, '')}" width="44" height="44" alt="" />`
+        : `<div class="suspect-avatar suspect-avatar--placeholder" aria-hidden="true"></div>`;
+      div.innerHTML = `${pic}<div class="suspect-card-text"><div class="suspect-name">${escapeHtml(s.name)}</div><div class="suspect-role">${escapeHtml(`${s.role} · ${s.relation}`)}</div></div><div class="suspect-badge"></div>`;
+      div.addEventListener('click', () => quickAction(`我想询问${s.name}关于案发当晚的情况`));
+      sl.appendChild(div);
+    });
+
+    updateClues();
+    updateTurnUI();
+
+    addGmOpening(data);
+  }
+
+  function rosterNames(data) {
+    return data.suspects.map(s => `${s.name}（${s.role}）`).join('、');
+  }
+
+  function scriptedGmReply(userMsg) {
+    const data = gameState.caseData;
+    const remaining = gameState.maxTurns - gameState.turns;
+    const tense = remaining <= 1 ? urgencyLine() : '';
+
+    for (const s of data.suspects) {
+      if (userMsg.includes(s.name)) {
+        let reply = `你与${s.name}（${s.role}）当面对质。对方称自己当晚「${s.alibi}」。言谈间曝出：${s.surface_motive}。`;
+        if (s.is_killer) {
+          reply += pick(rng, [
+            ' 对方语调平滑得像背书：「我没靠近过核心区。」偏偏措辞过于完整——像在盖住必经的流程。',
+            ' 回答速度快得不自然：「我一直在岗位上。」你却注意到他把指尖下意识地藏进口袋。',
+            ' 「冤枉。」两个字落得急促又工整——那一瞬间眼睑颤得像怕被看穿职业习惯与手感记忆。'
+          ]);
+        } else {
+          reply += ' ' + pick(rng, [
+            `再三追问下，对方含糊提到心事：${s.secret}。`,
+            `你捕捉到对方话里的裂缝：${s.secret}。`,
+            `对方越解释越急，最后只剩一句遮掩：${s.secret}。`
+          ]);
+        }
+        return reply + tenseSuffix(tense);
+      }
+    }
+
+    if (/不在场|证明|审讯/.test(userMsg)) {
+      return (
+        `${rosterNames(data)}——各人台词排练得像合唱，却把独奏的空档藏在缝里。点名一个，撕开独处窗口；再问谁能触碰那条看不见的权限链条。` +
+        tenseSuffix(tense)
+      );
+    }
+    if (/现场|勘察|物证|检查/.test(userMsg)) {
+      const hook =
+        (data.initial_clues && data.initial_clues[0]) ||
+        data.victim.discovery ||
+        data.setting ||
+        '';
+      return (
+        `你把鼻尖贴近那一行痕迹：「${hook.slice(0, 140)}${hook.length > 140 ? '…' : ''}」。物证不讲人情，它只问你——哪一种岗位职责能把这门锁、这道尘土、这点体液说成同一种结局？` +
+        tenseSuffix(tense)
+      );
+    }
+    if (/线索|分析|可疑|推断/.test(userMsg)) {
+      const axes = (data.deduction_focus || []).slice(0, 5);
+      const axisStr =
+        axes.length > 0 ? axes.join(' · ') : '动机被逼到墙角的那一刻 · 谁的手里有钥匙';
+      return (
+        `别急着编故事——先把疑点砌成承重墙：${axisStr}。谁在说「我不会」时装得最熟练？谁又恰好掌握那条你没见过的手艺？深挖落下的一锤，要对准榫口。` +
+        tenseSuffix(tense)
+      );
+    }
+
+    const scriptTitle = SCRIPT_CATALOG.find(s => s.id === scriptId)?.title || data.title;
+    return (
+      `《${scriptTitle}》这本卷宗从不笔直——你若停在寒暄层，它就会把你晾在半空。点名，施压，逼出一声走调的回音。` +
+      tenseSuffix(tense)
+    );
+  }
+
+  function shouldTriggerClue(userMsg) {
+    const msg = (userMsg || '').trim();
+    if (!msg) return false;
+    const strong =
+      /(纽扣|钥匙|配电|留声机|车票|广播|隧道|药|针|注射|砷|毒|紫外|RFID|温控|冷链|家谱|剃刀|针刺|绳索|密室|煤油|松节油|乙醚|画布|门禁|监控|时间线|不在场|动机|凶器|现场|尸体|血|纤维|工具|螺丝|手套|指纹)/;
+    if (strong.test(msg)) return true;
+    const data = gameState.caseData;
+    if (data?.suspects?.some(s => msg.includes(s.name))) return true;
+    return false;
+  }
+
+  function attachHiddenClueIfDue(userMsg, reply) {
+    const data = gameState.caseData;
+    const idx = gameState.hiddenRevealCursor;
+    if (!data?.hidden_clues || idx >= data.hidden_clues.length) return reply;
+
+    const trigger = shouldTriggerClue(userMsg);
+    const pacing = gameState.turns >= 2 && gameState.turns % 3 === 0; // 保底节奏
+    if (!trigger && !pacing) return reply;
+
+    const clue = data.hidden_clues[idx];
+    gameState.hiddenRevealCursor = idx + 1;
+    return reply + '\n\n【新线索：' + clue + '】';
+  }
+
+  async function queryGM(userMsg) {
+    if (gameState.turns >= gameState.maxTurns) return;
+    gameState.turns++;
+    updateTurnUI();
+
+    const btn = $('send-btn');
+    btn.disabled = true;
+    $('chat-input').disabled = true;
+
+    await new Promise(r => setTimeout(r, 220));
+    let reply = scriptedGmReply(userMsg);
+    reply = attachHiddenClueIfDue(userMsg, reply);
+
+    const clueMatch = reply.match(/【新线索：(.+?)】/);
+    if (clueMatch) {
+      gameState.clues.push(clueMatch[1]);
+      reply = reply.replace(/【新线索：.+?】/, '').trim();
+      updateClues();
+    }
+
+    gameState.history.push({ role: 'user', content: userMsg });
+    gameState.history.push({ role: 'assistant', content: reply });
+
+    addMessage('gm', reply);
+
+    if (gameState.turns >= gameState.maxTurns) {
+      setTimeout(() => {
+        addMessage('system', '卷宗留白用尽——要么结案，要么带着错觉沉没。');
+        openAccusation();
+      }, 900);
+    }
+
+    btn.disabled = false;
+    $('chat-input').disabled = false;
+    $('chat-input').focus();
+  }
+
+  function sendMessage(text) {
+    const input = $('chat-input');
+    const msg = (text || input.value || '').trim();
+    if (!msg || gameState.turns >= gameState.maxTurns) return;
+    input.value = '';
+    addMessage('player', msg);
+    queryGM(msg);
+  }
+
+  function quickAction(action) { sendMessage(action); }
+
+  function openAccusation() {
+    const suspects = gameState.caseData.suspects;
+    const list = $('modal-suspects');
+    list.innerHTML = '';
+    suspects.forEach((s, i) => {
+      const label = document.createElement('label');
+      label.className = 'suspect-radio';
+      const pic = s.avatar_url
+        ? `<img class="modal-suspect-avatar" src="${String(s.avatar_url).replace(/"/g, '')}" width="36" height="36" alt="" />`
+        : '';
+      label.innerHTML = `<input type="radio" name="suspect" value="${i}">${pic}<div><div style="font-size:13px;font-weight:500;color:var(--ink)">${escapeHtml(s.name)}</div><div style="font-size:11px;color:var(--muted)">${escapeHtml(s.role)}</div></div>`;
+      label.addEventListener('click', () => {
+        document.querySelectorAll('.suspect-radio').forEach(r => r.classList.remove('checked'));
+        label.classList.add('checked');
+      });
+      list.appendChild(label);
+    });
+    $('accusation-overlay').classList.add('show');
+  }
+
+  function closeAccusation() {
+    $('accusation-overlay').classList.remove('show');
+  }
+
+  function submitAccusation() {
+    const selected = document.querySelector('input[name="suspect"]:checked');
+    if (!selected) { alert('请选择一名嫌疑人'); return; }
+
+    const suspectIdx = parseInt(selected.value, 10);
+    const correct = suspectIdx === gameState.caseData.killer_index;
+
+    closeAccusation();
+    $('case-status').textContent = '已结案';
+    $('case-status').className = 'case-status status-solved';
+    addMessage('system', `——— 宣布逮捕：${gameState.caseData.suspects[suspectIdx].name} ———`);
+
+    setTimeout(() => {
+      const data = gameState.caseData;
+      const killer = data.suspects[data.killer_index];
+      $('result-verdict').textContent = correct ? '✓ 真相大白' : '✗ 冤枉好人';
+      $('result-verdict').className = 'result-verdict ' + (correct ? 'result-correct' : 'result-wrong');
+      $('result-accuracy').innerHTML = correct
+        ? `<p style="color:#1a5c1a;font-size:14px;margin-bottom:12px">你逮捕了真正的凶手：<strong>${killer.name}</strong></p>`
+        : `<p style="color:#8b1a1a;font-size:14px;margin-bottom:12px">真正的凶手是 <strong>${killer.name}</strong>，你指控了错误的人。</p>`;
+      const epilogue = resolveVerdictEpilogue(data, { correct, accusedIndex: suspectIdx });
+      $('result-story').textContent = [
+        '—— 结案余波 ——',
+        epilogue,
+        '',
+        '—— 卷宗复盘 ——',
+        data.full_truth,
+        '',
+        '动机：' + data.motive_truth
+      ].join('\n');
+      $('stat-turns').textContent = String(gameState.turns);
+      $('stat-clues').textContent = String(gameState.clues.length);
+
+      show('screen-result');
+    }, 800);
+  }
+
+  function startGame() {
+    show('screen-loading');
+    let fi = 0;
+    const flavorInterval = setInterval(() => {
+      $('loading-flavor').textContent = loadingFlavors[fi++ % loadingFlavors.length];
+    }, 350);
+
+    setTimeout(() => {
+      clearInterval(flavorInterval);
+      const data = generateScriptCase(scriptId, rng, diff);
+      gameState.caseData = data;
+      gameState.clues = [...data.initial_clues];
+      gameState.turns = 0;
+      gameState.hiddenRevealCursor = 0;
+      initGameUI(data);
+      show('screen-game');
+    }, 650);
+  }
+
+  // Bind UI
+  $('send-btn').addEventListener('click', () => sendMessage());
+  $('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+  $('act-alibi').addEventListener('click', () => quickAction('审讯所有嫌疑人，了解案发时各自的不在场证明'));
+  $('act-scene').addEventListener('click', () => quickAction('检查案发现场，描述你发现的物证和异常情况'));
+  $('act-analysis').addEventListener('click', () => quickAction('分析目前的线索，告诉我最可疑的地方'));
+  $('act-accuse').addEventListener('click', () => openAccusation());
+  $('btn-cancel-accuse').addEventListener('click', () => closeAccusation());
+  $('btn-submit-accuse').addEventListener('click', () => submitAccusation());
+  $('btn-new-case').addEventListener('click', () => {
+    const to = new URL('./select.html', window.location.href);
+    to.searchParams.set('diff', diff);
+    window.location.href = to.toString();
+  });
+
+  startGame();
+</script>
+</body>
+</html>
